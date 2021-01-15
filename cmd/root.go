@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/sirupsen/logrus"
+
 	"github.com/adakailabs/gocard/config"
 
 	"github.com/spf13/cobra"
@@ -84,6 +86,7 @@ func initConfig() {
 		// Search config in home directory with name ".gocard" (without extension).
 		viper.AddConfigPath(home)
 		viper.AddConfigPath("./")
+		viper.AddConfigPath("/tmp")
 		viper.SetConfigName("gocard")
 	}
 
@@ -91,8 +94,15 @@ func initConfig() {
 
 	// If a config file is found, read it in.
 	if err := viper.ReadInConfig(); err == nil {
-		fmt.Println("Using config file:", viper.ConfigFileUsed())
+		logrus.Info("Using config file:", viper.ConfigFileUsed())
 	}
+	if _, err := os.Stat(config.GocardPidFile); err == nil {
+		logrus.Info("found docker ID")
+		viper.SetConfigName("gocard.pid")
+		viper.MergeInConfig()
+		logrus.Info("docker ID : ", viper.GetString("container_id"))
+	}
+
 	config.LoadConfig()
 	config.GlobalConfig.LogConfig()
 }

@@ -2,8 +2,12 @@ package config
 
 import "C"
 import (
+	"context"
 	"fmt"
 	"os"
+
+	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/client"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
@@ -13,6 +17,8 @@ import (
 )
 
 var GlobalConfig *Config
+
+const GocardPidFile = "/tmp/gocard.pid.yam"
 
 type Config struct {
 	NodeName        string
@@ -33,6 +39,9 @@ type Config struct {
 	CardanoPort          string
 	CardanoHostAddress   string
 	CardanoCmdStrings    []string
+
+	ContainerID   string
+	ContainerIsUP bool
 }
 
 func LoadConfig() {
@@ -86,7 +95,7 @@ func (c *Config) SetCardanoPaths() {
 	if _, err := os.Stat(c.CardanoBaseLocal); os.IsNotExist(err) {
 		os.MkdirAll(c.CardanoBaseLocal, os.ModePerm)
 	}
-
+	c.CheckDockerContainerUp()
 }
 
 func (c *Config) SetContainerName() {
@@ -166,5 +175,37 @@ func (c *Config) SetContainerConfig() {
 		Cmd:          c.CardanoCmdStrings,
 		Tty:          false,
 		ExposedPorts: c.PortSet,
+	}
+}
+
+func (c *Config) CheckDockerContainerUp() {
+	c.ContainerID = viper.GetString("container_id")
+	if c.ContainerID != "" {
+		logrus.Info("container ID found: ", c.ContainerID)
+
+		ctx := context.Background()
+		cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+		if err != nil {
+			panic(err)
+		}
+
+		containers, err := cli.ContainerList(ctx, types.ContainerListOptions{})
+		if err != nil {
+			panic(err)
+		}
+
+		for _, container := range containers {
+			if container.ID == c.ContainerID {
+				logrus.Info("container is running")
+				c.ContainerIsUP = true
+			} else {
+				logrus.Info("container is not running")
+			}
+		}
+
+		if !c.ContainerIsUP {
+			os.Remove(GocardPidFile)
+		}
+
 	}
 }

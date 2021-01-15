@@ -1,9 +1,10 @@
+# -------------------
+# Node Configuration
+# -------------------
+docker_image: adakailabs/cardano-node:latest
 pool_name: TI-Rocinante
 pool_ticker: ROCI
 server_name: Rocinante01
-
-docker_image: adakailabs/cardano-node:latest
-
 service_is_producer: false
 
 expose_ports:

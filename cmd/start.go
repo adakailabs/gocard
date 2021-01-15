@@ -16,28 +16,22 @@ limitations under the License.
 package cmd
 
 import (
-	"fmt"
-
+	"github.com/adakailabs/gocard/node"
 	"github.com/spf13/cobra"
 )
 
 // startCmd represents the start command
 var startCmd = &cobra.Command{
 	Use:   "start",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+	Short: "start a node, based on configuration set in gocard.yaml file",
+	Long:  `Start a node, based on the configuration set in the gocard.yaml file.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("start called")
+		node.Start()
 	},
 }
 
 func init() {
-	rootCmd.AddCommand(startCmd)
+	nodeCmd.AddCommand(startCmd)
 
 	// Here you will define your flags and configuration settings.
 
