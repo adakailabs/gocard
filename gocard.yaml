@@ -1,0 +1,20 @@
+pool_name: TI-Rocinante
+pool_ticker: ROCI
+server_name: Rocinante01
+
+docker_image: adakailabs/cardano-node:latest
+
+service_is_producer: false
+
+expose_ports:
+  - "9100/tcp"
+  - "12798/tcp"
+
+cardano_base_container: /home/lovelace/cardano-node
+cardano_base_local: /tmp/cardano-node
+cardano_db: /db
+cardano_socket: /db/node.socket
+cardano_cli: /usr/local/bin/cardano-cli
+cardano_port: 3001
+cardano_host_address: 0.0.0.0
+
