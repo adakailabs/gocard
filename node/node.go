@@ -7,6 +7,10 @@ import (
 	"os"
 	"time"
 
+	"github.com/docker/docker/api/types/container"
+
+	"github.com/juju/errors"
+
 	"github.com/docker/docker/pkg/stdcopy"
 
 	"github.com/sirupsen/logrus"
@@ -18,6 +22,9 @@ import (
 )
 
 func Start() {
+	if err := config.GlobalConfig.CheckCardanoConfigFiles(); err != nil {
+		logrus.Fatal(errors.ErrorStack(err))
+	}
 
 	if config.GlobalConfig.ContainerIsUP {
 		logrus.Warn("container is already running")
@@ -67,27 +74,25 @@ func Start() {
 
 	go closure()
 
-	/*
-		statusCh, errCh := cli.ContainerWait(ctx, resp.ID, container.WaitConditionNotRunning)
-		select {
-		case err := <-errCh:
-			if err != nil {
-				panic(err)
-			}
-		case this := <-statusCh:
-			logrus.Info("status: ", this)
-		}
+	statusCh, errCh := cli.ContainerWait(ctx, resp.ID, container.WaitConditionNotRunning)
 
-		out, err := cli.ContainerLogs(ctx, resp.ID, types.ContainerLogsOptions{ShowStdout: true})
+	select {
+	case err := <-errCh:
 		if err != nil {
 			panic(err)
 		}
+	case this := <-statusCh:
+		logrus.Info("status: ", this)
+	}
 
-		logrus.Info("out: ", out)
+	out, err := cli.ContainerLogs(ctx, resp.ID, types.ContainerLogsOptions{ShowStdout: true})
+	if err != nil {
+		panic(err)
+	}
 
-		stdcopy.StdCopy(os.Stdout, os.Stderr, out)
+	logrus.Info("out: ", out)
 
-	*/
+	stdcopy.StdCopy(os.Stdout, os.Stderr, out)
 
 }
 
@@ -115,6 +120,10 @@ func Stop() {
 		logrus.Warn("no cardano container is running")
 	}
 
+}
+
+func Init() {
+	config.GlobalConfig.SetCardanoInit()
 }
 
 func WriteContainerID(containerID string) {

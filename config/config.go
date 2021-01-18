@@ -4,7 +4,16 @@ import "C"
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"os"
+	"strings"
+	"time"
+
+	"github.com/tidwall/sjson"
+
+	"github.com/juju/errors"
+
+	"github.com/tidwall/gjson"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
@@ -45,7 +54,9 @@ type Config struct {
 }
 
 func LoadConfig() {
+
 	c := &Config{}
+
 	c.NodeName = viper.GetString("node_name")
 	c.NodeTicker = viper.GetString("node_ticker")
 	c.DockerImage = viper.GetString("docker_image")
@@ -58,7 +69,7 @@ func LoadConfig() {
 	c.SetCmdStrings()
 	c.SetHostConfig()
 	c.SetContainerConfig()
-
+	//c.LoadCardanoViperConfig()
 	GlobalConfig = c
 }
 
@@ -81,6 +92,85 @@ func (c *Config) LogConfig() {
 		logrus.Info("exposed port: ", key)
 	}
 
+}
+
+func (c *Config) LoadCardanoViperConfig() {
+	cardanoConfigDir := fmt.Sprintf("%s/config", c.CardanoBaseLocal)
+	cardanoConfigFile := fmt.Sprintf("%s/config.json", cardanoConfigDir)
+	var newJSON string
+	if _, err := os.Stat(cardanoConfigFile); err == nil {
+		jsonFile, err := ioutil.ReadFile(cardanoConfigFile)
+		if err != nil {
+			err = errors.Annotate(err, "could not read cardano config file")
+			panic(errors.ErrorStack(err))
+		}
+		defaultScribes := gjson.Get(string(jsonFile), "defaultScribes").Array()
+		skipDefaults := false
+		for _, defaults := range defaultScribes {
+			defaultsWithType := defaults.Array()
+			for _, element := range defaultsWithType {
+				elementWithType := element.Str
+				if elementWithType == "FileSK" {
+					skipDefaults = true
+				}
+			}
+
+		}
+		if !skipDefaults {
+			element := `[
+    %s,
+    [
+      "FileSK",
+      "/tmp/cardano-node/log/cardano.log"
+    ]
+  ]`
+			newJSONElement := fmt.Sprintf(element, defaultScribes[0].Raw)
+			newJSON, err = sjson.SetRaw(string(jsonFile), "defaultScribes", newJSONElement)
+			if err != nil {
+				panic(err.Error())
+			}
+
+		}
+
+		setupScribes := gjson.Get(newJSON, "setupScribes").Array()
+		skipSetup := false
+		for _, setupUps := range setupScribes {
+			if strings.Contains(setupUps.Raw, "FileSK") {
+				skipSetup = true
+			}
+		}
+		time.Sleep(time.Second)
+		if !skipSetup {
+			element := `[
+    %s,
+    {
+      "scFormat": "ScText",
+      "scKind": "FileSK",
+      "scName": "/tmp/cardano-node/log/cardano.log",
+      "scRotation": null
+    }
+  ]`
+			newJSONElement := fmt.Sprintf(element, setupScribes[0].Raw)
+			newJSON, err = sjson.SetRaw(newJSON, "setupScribes", newJSONElement)
+			if err != nil {
+				panic(err.Error())
+			}
+		}
+
+		prometheusJSON := fmt.Sprintf(`[
+    "%s",
+    %d
+  ]`,
+			viper.GetString("cardano_hasprometheus.address"),
+			viper.GetInt("cardano_hasprometheus.port"))
+
+		newJSON, err = sjson.SetRaw(newJSON, "hasPrometheus", prometheusJSON)
+		if err != nil {
+			panic(err.Error())
+		}
+
+		ioutil.WriteFile(cardanoConfigFile, []byte(newJSON), os.ModePerm)
+	}
 }
 
 func (c *Config) SetCardanoPaths() {
