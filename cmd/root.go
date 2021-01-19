@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/juju/errors"
+
 	"github.com/sirupsen/logrus"
 
 	"github.com/adakailabs/gocard/config"
@@ -71,7 +73,6 @@ func init() {
 
 // initConfig reads in config file and ENV variables if set.
 func initConfig() {
-
 	if cfgFile != "" {
 		// Use config file from the flag.
 		viper.SetConfigFile(cfgFile)
@@ -99,7 +100,10 @@ func initConfig() {
 	if _, err := os.Stat(config.GocardPidFile); err == nil {
 		logrus.Info("found docker ID")
 		viper.SetConfigName("gocard.pid")
-		viper.MergeInConfig()
+		if err := viper.MergeInConfig(); err != nil {
+			err = errors.Annotatef(err, "merging viper config %s", config.GocardPidFile)
+			panic(err.Error())
+		}
 		logrus.Info("docker ID : ", viper.GetString("container_id"))
 	}
 

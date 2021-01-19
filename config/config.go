@@ -4,16 +4,8 @@ import "C"
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
-	"os"
-	"strings"
-	"time"
-
-	"github.com/tidwall/sjson"
-
 	"github.com/juju/errors"
-
-	"github.com/tidwall/gjson"
+	"os"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
@@ -27,7 +19,7 @@ import (
 
 var GlobalConfig *Config
 
-const GocardPidFile = "/tmp/gocard.pid.yam"
+const GocardPidFile = "/tmp/gocard.pid.yaml"
 
 type Config struct {
 	NodeName        string
@@ -42,7 +34,7 @@ type Config struct {
 
 	CardanoBaseContainer string
 	CardanoBaseLocal     string
-	CardanoDb            string
+	CardanoDB            string
 	CardanoCli           string
 	CardanoSocket        string
 	CardanoPort          string
@@ -54,7 +46,6 @@ type Config struct {
 }
 
 func LoadConfig() {
-
 	c := &Config{}
 
 	c.NodeName = viper.GetString("node_name")
@@ -69,7 +60,6 @@ func LoadConfig() {
 	c.SetCmdStrings()
 	c.SetHostConfig()
 	c.SetContainerConfig()
-	//c.LoadCardanoViperConfig()
 	GlobalConfig = c
 }
 
@@ -83,107 +73,31 @@ func (c *Config) LogConfig() {
 
 	logrus.Info("cardano base container: ", c.CardanoBaseContainer)
 	logrus.Info("cardano base local    : ", c.CardanoBaseLocal)
-	logrus.Info("cardano db: ", c.CardanoDb)
+	logrus.Info("cardano db: ", c.CardanoDB)
 	logrus.Info("cardano socket: ", c.CardanoSocket)
 	logrus.Info("cardano host: ", c.CardanoHostAddress)
 	logrus.Info("cardano port: ", c.CardanoPort)
 	logrus.Info("cardano cmd: ", c.CardanoCmdStrings)
-	for key, _ := range c.PortSet {
+	for key := range c.PortSet {
 		logrus.Info("exposed port: ", key)
 	}
-
 }
 
-func (c *Config) LoadCardanoViperConfig() {
-	cardanoConfigDir := fmt.Sprintf("%s/config", c.CardanoBaseLocal)
-	cardanoConfigFile := fmt.Sprintf("%s/config.json", cardanoConfigDir)
-	var newJSON string
-	if _, err := os.Stat(cardanoConfigFile); err == nil {
-		jsonFile, err := ioutil.ReadFile(cardanoConfigFile)
-		if err != nil {
-			err = errors.Annotate(err, "could not read cardano config file")
-			panic(errors.ErrorStack(err))
-		}
-		defaultScribes := gjson.Get(string(jsonFile), "defaultScribes").Array()
-		skipDefaults := false
-		for _, defaults := range defaultScribes {
-			defaultsWithType := defaults.Array()
-			for _, element := range defaultsWithType {
-				elementWithType := element.Str
-				if elementWithType == "FileSK" {
-					skipDefaults = true
-				}
-			}
-
-		}
-		if !skipDefaults {
-			element := `[
-    %s,
-    [
-      "FileSK",
-      "/tmp/cardano-node/log/cardano.log"
-    ]
-  ]`
-			newJSONElement := fmt.Sprintf(element, defaultScribes[0].Raw)
-			newJSON, err = sjson.SetRaw(string(jsonFile), "defaultScribes", newJSONElement)
-			if err != nil {
-				panic(err.Error())
-			}
-
-		}
-
-		setupScribes := gjson.Get(newJSON, "setupScribes").Array()
-		skipSetup := false
-		for _, setupUps := range setupScribes {
-			if strings.Contains(setupUps.Raw, "FileSK") {
-				skipSetup = true
-			}
-		}
-		time.Sleep(time.Second)
-		if !skipSetup {
-			element := `[
-    %s,
-    {
-      "scFormat": "ScText",
-      "scKind": "FileSK",
-      "scName": "/tmp/cardano-node/log/cardano.log",
-      "scRotation": null
-    }
-  ]`
-			newJSONElement := fmt.Sprintf(element, setupScribes[0].Raw)
-			newJSON, err = sjson.SetRaw(newJSON, "setupScribes", newJSONElement)
-			if err != nil {
-				panic(err.Error())
-			}
-		}
-
-		prometheusJSON := fmt.Sprintf(`[
-    "%s",
-    %d
-  ]`,
-			viper.GetString("cardano_hasprometheus.address"),
-			viper.GetInt("cardano_hasprometheus.port"))
-
-		newJSON, err = sjson.SetRaw(newJSON, "hasPrometheus", prometheusJSON)
-		if err != nil {
-			panic(err.Error())
-		}
-
-		ioutil.WriteFile(cardanoConfigFile, []byte(newJSON), os.ModePerm)
-	}
-}
 
 func (c *Config) SetCardanoPaths() {
 	c.CardanoBaseContainer = viper.GetString("cardano_base_container")
 	c.CardanoBaseLocal = viper.GetString("cardano_base_local")
 	c.CardanoCli = viper.GetString("cardano_cli")
-	c.CardanoDb = viper.GetString("cardano_db")
+	c.CardanoDB = viper.GetString("cardano_db")
 	c.CardanoSocket = viper.GetString("cardano_socket")
 	c.CardanoHostAddress = viper.GetString("cardano_host_address")
 	c.CardanoPort = viper.GetString("cardano_port")
 
 	if _, err := os.Stat(c.CardanoBaseLocal); os.IsNotExist(err) {
-		os.MkdirAll(c.CardanoBaseLocal, os.ModePerm)
+		if err := os.MkdirAll(c.CardanoBaseLocal, os.ModePerm); err != nil {
+			err = errors.Annotatef(err,"creating dir path: %s", c.CardanoBaseLocal)
+			panic(err.Error())
+		}
 	}
 	c.CheckDockerContainerUp()
 }
@@ -225,37 +139,39 @@ func (c *Config) SetHostConfig() {
 }
 
 func (c *Config) SetCmdStrings() {
-
 	c.CardanoCmdStrings = make([]string, 0, 10)
 
-	dataBasePathS := fmt.Sprintf("--database-path")
-	dataBasePathC := fmt.Sprintf("%s%s", c.CardanoBaseContainer, c.CardanoDb)
-	socketPathS := fmt.Sprintf("--socket-path")
+	dataBasePathS := "--database-path"
+	dataBasePathC := fmt.Sprintf("%s%s", c.CardanoBaseContainer, c.CardanoDB)
+	socketPathS := "--socket-path"
 	socketPathC := fmt.Sprintf("%s%s", c.CardanoBaseContainer, c.CardanoSocket)
-	portS := fmt.Sprintf("--port")
-	portC := fmt.Sprintf("%s", c.CardanoPort)
-	hostAddrS := fmt.Sprintf("--host-addr")
-	hostAddrC := fmt.Sprintf("%s", c.CardanoHostAddress)
-	cConfigS := fmt.Sprintf("--config")
+	portS := "--port"
+	portC :=  c.CardanoPort
+	hostAddrS := "--host-addr"
+	hostAddrC := c.CardanoHostAddress
+	cConfigS := "--config"
 	cConfigC := fmt.Sprintf("%s/config/config.json", c.CardanoBaseContainer)
-	topologyS := fmt.Sprintf("--topology")
+	topologyS := "--topology"
 	topologyC := fmt.Sprintf("%s/config/topology.json", c.CardanoBaseContainer)
 
-	//c.CardanoCmdStrings = append(c.CardanoCmdStrings, "entrypoint.sh")
-	c.CardanoCmdStrings = append(c.CardanoCmdStrings, "run")
-	c.CardanoCmdStrings = append(c.CardanoCmdStrings, dataBasePathS)
-	c.CardanoCmdStrings = append(c.CardanoCmdStrings, dataBasePathC)
-	c.CardanoCmdStrings = append(c.CardanoCmdStrings, socketPathS)
-	c.CardanoCmdStrings = append(c.CardanoCmdStrings, socketPathC)
-	c.CardanoCmdStrings = append(c.CardanoCmdStrings, portS)
-	c.CardanoCmdStrings = append(c.CardanoCmdStrings, portC)
-	c.CardanoCmdStrings = append(c.CardanoCmdStrings, hostAddrS)
-	c.CardanoCmdStrings = append(c.CardanoCmdStrings, hostAddrC)
-	c.CardanoCmdStrings = append(c.CardanoCmdStrings, cConfigS)
-	c.CardanoCmdStrings = append(c.CardanoCmdStrings, cConfigC)
-	c.CardanoCmdStrings = append(c.CardanoCmdStrings, topologyS)
-	c.CardanoCmdStrings = append(c.CardanoCmdStrings, topologyC)
+	c.CardanoCmdStrings = append(c.CardanoCmdStrings, "run",
+		dataBasePathS,
+		dataBasePathC,
 
+		socketPathS,
+		socketPathC,
+
+		portS,
+		portC,
+
+		hostAddrS,
+		hostAddrC,
+
+		cConfigS,
+		cConfigC,
+
+		topologyS,
+		topologyC)
 }
 
 func (c *Config) SetContainerConfig() {
@@ -284,8 +200,8 @@ func (c *Config) CheckDockerContainerUp() {
 			panic(err)
 		}
 
-		for _, container := range containers {
-			if container.ID == c.ContainerID {
+		for i := range containers {
+			if containers[i].ID == c.ContainerID {
 				logrus.Info("container is running")
 				c.ContainerIsUP = true
 			} else {
@@ -296,6 +212,5 @@ func (c *Config) CheckDockerContainerUp() {
 		if !c.ContainerIsUP {
 			os.Remove(GocardPidFile)
 		}
-
 	}
 }

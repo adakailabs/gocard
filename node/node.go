@@ -1,6 +1,7 @@
 package node
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -43,7 +44,10 @@ func Start() {
 	if err != nil {
 		panic(err)
 	}
-	io.Copy(os.Stdout, reader)
+	if _, err = io.Copy(os.Stdout, reader); err != nil {
+		err = errors.Annotate(err, "copying to stadout")
+		panic(err.Error())
+	}
 
 	resp, err := cli.ContainerCreate(ctx,
 		config.GlobalConfig.ContainerConfig,
@@ -53,51 +57,66 @@ func Start() {
 		panic(err)
 	}
 
-	if err := cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{}); err != nil {
+	if err = cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{}); err != nil {
 		panic(err)
 	}
 
-	WriteContainerID(resp.ID)
+	writeContainerID(resp.ID)
 
-	closure := func() {
-		timer := time.NewTicker(time.Second)
-
-		for _ = range timer.C {
-			logrus.Info("logs...")
-			out, err := cli.ContainerLogs(ctx, resp.ID, types.ContainerLogsOptions{ShowStdout: true})
-			if err != nil {
-				panic(err)
-			}
-			stdcopy.StdCopy(os.Stdout, os.Stderr, out)
-		}
-	}
-
-	go closure()
+	readLogs(ctx, cli, resp.ID)
 
 	statusCh, errCh := cli.ContainerWait(ctx, resp.ID, container.WaitConditionNotRunning)
 
 	select {
-	case err := <-errCh:
+	case err = <-errCh:
 		if err != nil {
 			panic(err)
 		}
 	case this := <-statusCh:
 		logrus.Info("status: ", this)
 	}
+	/*
+		out, err := cli.ContainerLogs(ctx, resp.ID, types.ContainerLogsOptions{ShowStdout: true})
+		if err != nil {
+			panic(err)
+		}
 
-	out, err := cli.ContainerLogs(ctx, resp.ID, types.ContainerLogsOptions{ShowStdout: true})
-	if err != nil {
-		panic(err)
+
+		logrus.Info("out: ", out)
+
+		if _, err := stdcopy.StdCopy(os.Stdout, os.Stderr, out); err != nil {
+			err = errors.Annotate(err, "copying to standard out")
+			panic(err.Error())
+		}
+
+	*/
+}
+
+func readLogs(ctx context.Context, cli *client.Client, containerID string) {
+	closure := func() {
+		timer := time.NewTicker(time.Second)
+
+		for range timer.C {
+			logrus.Info("logs...")
+			out, errC := cli.ContainerLogs(ctx, containerID, types.ContainerLogsOptions{ShowStdout: true})
+			if errC != nil {
+				panic(errC)
+			}
+			var stdOut bytes.Buffer
+			var stdErr bytes.Buffer
+
+			if _, err := stdcopy.StdCopy(&stdOut, &stdErr, out); err != nil {
+				err = errors.Annotate(err, "copying to stdout")
+				panic(err.Error())
+			}
+			logrus.Info("xxx", stdOut.String())
+		}
 	}
 
-	logrus.Info("out: ", out)
-
-	stdcopy.StdCopy(os.Stdout, os.Stderr, out)
-
+	go closure()
 }
 
 func Stop() {
-
 	if config.GlobalConfig.ContainerIsUP {
 		logrus.Info("attempting to stop container with ID: ", config.GlobalConfig.ContainerID)
 		ctx := context.Background()
@@ -119,14 +138,13 @@ func Stop() {
 	} else {
 		logrus.Warn("no cardano container is running")
 	}
-
 }
 
 func Init() {
 	config.GlobalConfig.SetCardanoInit()
 }
 
-func WriteContainerID(containerID string) {
+func writeContainerID(containerID string) {
 	logrus.Info("container ID: ", containerID)
 	f, err := os.Create(config.GocardPidFile)
 	if err != nil {

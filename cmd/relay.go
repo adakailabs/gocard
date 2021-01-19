@@ -37,7 +37,7 @@ to quickly create a Cobra application.`,
 }
 
 func init() {
-	//startCmd.AddCommand(relayCmd)
+	// startCmd.AddCommand(relayCmd)
 
 	// Here you will define your flags and configuration settings.
 
