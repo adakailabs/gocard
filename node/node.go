@@ -1,7 +1,7 @@
 package node
 
 import (
-	"bytes"
+	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -11,8 +11,6 @@ import (
 	"github.com/docker/docker/api/types/container"
 
 	"github.com/juju/errors"
-
-	"github.com/docker/docker/pkg/stdcopy"
 
 	"github.com/sirupsen/logrus"
 
@@ -63,7 +61,7 @@ func Start() {
 
 	writeContainerID(resp.ID)
 
-	readLogs(ctx, cli, resp.ID)
+	// readLogs(ctx, cli, resp.ID)
 
 	statusCh, errCh := cli.ContainerWait(ctx, resp.ID, container.WaitConditionNotRunning)
 
@@ -75,45 +73,34 @@ func Start() {
 	case this := <-statusCh:
 		logrus.Info("status: ", this)
 	}
-	/*
-		out, err := cli.ContainerLogs(ctx, resp.ID, types.ContainerLogsOptions{ShowStdout: true})
-		if err != nil {
-			panic(err)
-		}
-
-
-		logrus.Info("out: ", out)
-
-		if _, err := stdcopy.StdCopy(os.Stdout, os.Stderr, out); err != nil {
-			err = errors.Annotate(err, "copying to standard out")
-			panic(err.Error())
-		}
-
-	*/
 }
 
 func readLogs(ctx context.Context, cli *client.Client, containerID string) {
-	closure := func() {
-		timer := time.NewTicker(time.Second)
+	out, errC := cli.ContainerLogs(ctx, containerID, types.ContainerLogsOptions{ShowStdout: true})
+	if errC != nil {
+		panic(errC)
+	}
+	scanner := bufio.NewScanner(out)
+	done := make(chan struct{})
 
+	timer := time.NewTicker(time.Second * 2)
+
+	closure := func() {
 		for range timer.C {
-			logrus.Info("logs...")
-			out, errC := cli.ContainerLogs(ctx, containerID, types.ContainerLogsOptions{ShowStdout: true})
+			logrus.Info("monitoring logs")
+			out, errC = cli.ContainerLogs(ctx, containerID, types.ContainerLogsOptions{ShowStdout: true})
 			if errC != nil {
 				panic(errC)
 			}
-			var stdOut bytes.Buffer
-			var stdErr bytes.Buffer
-
-			if _, err := stdcopy.StdCopy(&stdOut, &stdErr, out); err != nil {
-				err = errors.Annotate(err, "copying to stdout")
-				panic(err.Error())
+			for scanner.Scan() {
+				logrus.Info("XXXX", scanner.Text())
 			}
-			logrus.Info("xxx", stdOut.String())
+			done <- struct{}{}
 		}
 	}
-
 	go closure()
+
+	<-done
 }
 
 func Stop() {
