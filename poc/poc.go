@@ -20,8 +20,7 @@ import (
 	"github.com/docker/docker/client"
 )
 
-func Start() {
-
+func Start(c *config.Config) {
 	dockerImage := viper.GetString("docker_image")
 
 	ctx := context.Background()
@@ -37,8 +36,8 @@ func Start() {
 	io.Copy(os.Stdout, reader)
 
 	resp, err := cli.ContainerCreate(ctx,
-		config.GlobalConfig.ContainerConfig,
-		config.GlobalConfig.HostConfig,
+		c.ContainerConfig,
+		c.HostConfig,
 		nil, nil, "")
 	if err != nil {
 		panic(err)
@@ -53,7 +52,7 @@ func Start() {
 	closure := func() {
 		timer := time.NewTicker(time.Second)
 
-		for _ = range timer.C {
+		for range timer.C {
 			logrus.Info("logs...")
 			out, err := cli.ContainerLogs(ctx, resp.ID, types.ContainerLogsOptions{ShowStdout: true})
 			if err != nil {
@@ -83,5 +82,4 @@ func Start() {
 	logrus.Info("out: ", out)
 
 	stdcopy.StdCopy(os.Stdout, os.Stderr, out)
-
 }

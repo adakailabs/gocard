@@ -104,15 +104,25 @@ func (c *Config) updateCardanoConfig() {
 				}
 			}
 		}
+
+		nodeType := "relay"
+		if c.IsProducer {
+			nodeType = "producer"
+		}
+
+		nodeName := fmt.Sprintf("%s-%s", c.ContainerName, nodeType)
+
+		cardanoLogPath := fmt.Sprintf("%s/log/cardano-%s.log", c.CardanoBaseContainer, nodeName)
+
 		if !skipDefaults {
 			element := `[
     %s,
     [
       "FileSK",
-      "/tmp/cardano-node/log/cardano.log"
+      "%s"
     ]
   ]`
-			newJSONElement := fmt.Sprintf(element, defaultScribes[0].Raw)
+			newJSONElement := fmt.Sprintf(element, defaultScribes[0].Raw, cardanoLogPath)
 			newJSON, err = sjson.SetRaw(string(jsonFile), "defaultScribes", newJSONElement)
 			if err != nil {
 				panic(err.Error())
@@ -133,11 +143,11 @@ func (c *Config) updateCardanoConfig() {
     {
       "scFormat": "ScText",
       "scKind": "FileSK",
-      "scName": "/tmp/cardano-node/log/cardano.log",
+      "scName": "%s",
       "scRotation": null
     }
   ]`
-			newJSONElement := fmt.Sprintf(element, setupScribes[0].Raw)
+			newJSONElement := fmt.Sprintf(element, setupScribes[0].Raw, cardanoLogPath)
 			newJSON, err = sjson.SetRaw(newJSON, "setupScribes", newJSONElement)
 			if err != nil {
 				panic(err.Error())

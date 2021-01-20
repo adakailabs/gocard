@@ -6,9 +6,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"time"
 
 	"github.com/docker/docker/api/types/container"
+
+	"github.com/coreos/go-systemd/daemon"
 
 	"github.com/juju/errors"
 
@@ -20,17 +23,17 @@ import (
 	"github.com/docker/docker/client"
 )
 
-func Start() {
-	if err := config.GlobalConfig.CheckCardanoConfigFiles(); err != nil {
+func Start(c *config.Config) {
+	if err := c.CheckCardanoConfigFiles(); err != nil {
 		logrus.Fatal(errors.ErrorStack(err))
 	}
 
-	if config.GlobalConfig.ContainerIsUP {
+	if c.ContainerIsUP {
 		logrus.Warn("container is already running")
 		return
 	}
 
-	dockerImage := config.GlobalConfig.DockerImage
+	dockerImage := c.DockerImage
 
 	ctx := context.Background()
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
@@ -48,8 +51,8 @@ func Start() {
 	}
 
 	resp, err := cli.ContainerCreate(ctx,
-		config.GlobalConfig.ContainerConfig,
-		config.GlobalConfig.HostConfig,
+		c.ContainerConfig,
+		c.HostConfig,
 		nil, nil, "")
 	if err != nil {
 		panic(err)
@@ -60,75 +63,127 @@ func Start() {
 	}
 
 	writeContainerID(resp.ID)
-
+	containerWait(ctx, cli, resp.ID)
 	// readLogs(ctx, cli, resp.ID)
+}
 
-	statusCh, errCh := cli.ContainerWait(ctx, resp.ID, container.WaitConditionNotRunning)
+func containerWait(ctx context.Context, cli *client.Client, containerID string) {
+	// setup signal catching
+	sigs := make(chan os.Signal, 1)
 
-	select {
-	case err = <-errCh:
-		if err != nil {
-			panic(err)
+	// catch all signals since not explicitly listing
+	signal.Notify(sigs)
+
+	systemDNofifyWatch()
+
+	statusCh, errCh := cli.ContainerWait(ctx, containerID, container.WaitConditionNotRunning)
+	for {
+		select {
+		case err := <-errCh:
+			if err != nil {
+				logrus.Error("container stoped with error: ", err.Error())
+				err = os.Remove(config.GocardPidFile)
+				if err != nil {
+					logrus.Error("could not remove pid file")
+				}
+				logrus.Fatal("stopping now")
+			}
+		case this := <-statusCh:
+			logrus.Info("container stoped with with status: ", this.StatusCode)
+			err := os.Remove(config.GocardPidFile)
+			if err != nil {
+				logrus.Error("could not remove pid file")
+			}
+			logrus.Info("stopping now")
+			os.Exit(1)
+
+		case s := <-sigs:
+			logrus.Infof("RECEIVED SIGNAL: %s", s.String())
+			if s.String() == "terminated" || s.String() == "interrupt" {
+				logrus.Info("exiting with signal: ", s.String())
+				stop(containerID)
+				logrus.Exit(1)
+			}
 		}
-	case this := <-statusCh:
-		logrus.Info("status: ", this)
+		time.Sleep(time.Second)
 	}
 }
 
-func readLogs(ctx context.Context, cli *client.Client, containerID string) {
-	out, errC := cli.ContainerLogs(ctx, containerID, types.ContainerLogsOptions{ShowStdout: true})
-	if errC != nil {
-		panic(errC)
+func systemDNofifyWatch() {
+	_, err := daemon.SdNotify(false, daemon.SdNotifyReady)
+	if err != nil {
+		panic(err.Error())
 	}
-	scanner := bufio.NewScanner(out)
-	done := make(chan struct{})
 
+	go func() {
+		interval, errs := daemon.SdWatchdogEnabled(false)
+		if errs != nil || interval == 0 {
+			return
+		}
+		for {
+			_, err := daemon.SdNotify(false, daemon.SdNotifyWatchdog)
+			if err != nil {
+				panic(err.Error())
+			}
+			time.Sleep(interval / 3)
+		}
+	}()
+}
+
+func readLogs(ctx context.Context, cli *client.Client, containerID string) {
 	timer := time.NewTicker(time.Second * 2)
 
 	closure := func() {
 		for range timer.C {
+			out, errC := cli.ContainerLogs(ctx, containerID, types.ContainerLogsOptions{ShowStdout: true})
+			if errC != nil {
+				panic(errC)
+			}
+			scanner := bufio.NewScanner(out)
+
 			logrus.Info("monitoring logs")
-			out, errC = cli.ContainerLogs(ctx, containerID, types.ContainerLogsOptions{ShowStdout: true})
+			_, errC = cli.ContainerLogs(ctx, containerID, types.ContainerLogsOptions{ShowStdout: true})
 			if errC != nil {
 				panic(errC)
 			}
 			for scanner.Scan() {
 				logrus.Info("XXXX", scanner.Text())
 			}
-			done <- struct{}{}
 		}
 	}
 	go closure()
-
-	<-done
 }
 
-func Stop() {
-	if config.GlobalConfig.ContainerIsUP {
-		logrus.Info("attempting to stop container with ID: ", config.GlobalConfig.ContainerID)
-		ctx := context.Background()
-		cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
-		if err != nil {
-			panic(err)
-		}
-
-		if err := cli.ContainerStop(ctx, config.GlobalConfig.ContainerID, nil); err != nil {
-			panic(err)
-		}
-		logrus.Info("stoped container")
-	}
-	if config.GlobalConfig.ContainerID != "" {
-		err := os.Remove(config.GocardPidFile)
-		if err != nil {
-			logrus.Error("could not remove pid file")
-		}
-	} else {
-		logrus.Warn("no cardano container is running")
+func Stop(c *config.Config) {
+	if c.ContainerIsUP {
+		stop(c.ContainerID)
 	}
 }
 
-func Init() {
-	config.GlobalConfig.SetCardanoInit()
+func stop(containerID string) {
+	_, err := daemon.SdNotify(false, daemon.SdNotifyStopping)
+	if err != nil {
+		panic(err.Error())
+	}
+	logrus.Info("attempting to stop container with ID: ", containerID)
+	ctx := context.Background()
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	if err != nil {
+		panic(err)
+	}
+
+	if err = cli.ContainerStop(ctx, containerID, nil); err != nil {
+		panic(err)
+	}
+	logrus.Info("stopped container")
+	err = os.Remove(config.GocardPidFile)
+	if err != nil {
+		logrus.Error("could not remove pid file")
+	}
+}
+
+func Init(c *config.Config) {
+	c.SetCardanoInit()
 }
 
 func writeContainerID(containerID string) {

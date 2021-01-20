@@ -16,6 +16,7 @@ limitations under the License.
 package cmd
 
 import (
+	"github.com/adakailabs/gocard/config"
 	"github.com/adakailabs/gocard/poc"
 	"github.com/sirupsen/logrus"
 
@@ -34,7 +35,7 @@ This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		logrus.Info("start")
-		poc.Start()
+		poc.Start(config.New())
 	},
 }
 

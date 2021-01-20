@@ -17,8 +17,6 @@ import (
 	"github.com/spf13/viper"
 )
 
-var GlobalConfig *Config
-
 const GocardPidFile = "/tmp/gocard.pid.yaml"
 
 type Config struct {
@@ -45,7 +43,8 @@ type Config struct {
 	ContainerIsUP bool
 }
 
-func LoadConfig() {
+
+func New() *Config {
 	c := &Config{}
 
 	c.NodeName = viper.GetString("node_name")
@@ -60,7 +59,8 @@ func LoadConfig() {
 	c.SetCmdStrings()
 	c.SetHostConfig()
 	c.SetContainerConfig()
-	GlobalConfig = c
+	c.LogConfig()
+	return c
 }
 
 func (c *Config) LogConfig() {
@@ -69,7 +69,7 @@ func (c *Config) LogConfig() {
 		containerType = "producer"
 	}
 	logrus.Info("container type: ", containerType)
-	logrus.Info("docker image: ", GlobalConfig.DockerImage)
+	logrus.Info("docker image: ", c.DockerImage)
 
 	logrus.Info("cardano base container: ", c.CardanoBaseContainer)
 	logrus.Info("cardano base local    : ", c.CardanoBaseLocal)

@@ -16,6 +16,7 @@ limitations under the License.
 package cmd
 
 import (
+	"github.com/adakailabs/gocard/config"
 	"github.com/adakailabs/gocard/node"
 
 	"github.com/spf13/cobra"
@@ -29,7 +30,7 @@ var initCmd = &cobra.Command{
 - Download configuration files
 - Performa basic configuration to allow it work with gocard.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		node.Init()
+		node.Init(config.New())
 	},
 }
 

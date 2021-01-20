@@ -88,6 +88,8 @@ func initConfig() {
 		viper.AddConfigPath(home)
 		viper.AddConfigPath("./")
 		viper.AddConfigPath("/tmp")
+		viper.AddConfigPath("/etc/cardano")
+
 		viper.SetConfigName("gocard")
 	}
 
@@ -106,7 +108,4 @@ func initConfig() {
 		}
 		logrus.Info("docker ID : ", viper.GetString("container_id"))
 	}
-
-	config.LoadConfig()
-	config.GlobalConfig.LogConfig()
 }

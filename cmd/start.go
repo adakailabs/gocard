@@ -16,6 +16,7 @@ limitations under the License.
 package cmd
 
 import (
+	"github.com/adakailabs/gocard/config"
 	"github.com/adakailabs/gocard/node"
 	"github.com/spf13/cobra"
 )
@@ -26,7 +27,7 @@ var startCmd = &cobra.Command{
 	Short: "start a node, based on configuration set in gocard.yaml file",
 	Long:  `Start a node, based on the configuration set in the gocard.yaml file.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		node.Start()
+		node.Start(config.New())
 	},
 }
 
