@@ -135,6 +135,27 @@ func (c *Config) SetExposedPorts() {
 func (c *Config) SetHostConfig() {
 	c.HostConfig = &container.HostConfig{
 		Mounts: c.Mounts,
+		PortBindings: nat.PortMap{
+			"9100/tcp": []nat.PortBinding{
+            {
+                HostIP: "0.0.0.0",
+                HostPort: "9100",
+            },
+        },
+			"12798/tcp": []nat.PortBinding{
+				{
+					HostIP: "0.0.0.0",
+					HostPort: "9100",
+				},
+			},
+			"3001/tcp": []nat.PortBinding{
+				{
+					HostIP: "0.0.0.0",
+					HostPort: "9100",
+				},
+			},
+
+    },
 	}
 }
 

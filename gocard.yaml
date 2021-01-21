@@ -10,8 +10,8 @@ service_is_producer: false
 expose_ports:
   - "9100/tcp"
   - "12798/tcp"
-
-cardano_latest_config: https://hydra.iohk.io/job/Cardano/iohk-nix/cardano-deployment/latest-finished/download/1/
+                       
+cardano_latest_config: https://hydra.iohk.io/job/Cardano/cardano-node/cardano-deployment/latest-finished/download/1/
 cardano_base_container: /home/lovelace/cardano-node
 cardano_base_local: /tmp/cardano-node
 cardano_db: /db
@@ -22,3 +22,5 @@ cardano_host_address: 0.0.0.0
 cardano_hasprometheus:
   address: 0.0.0.0
   port: 12798
+
+#https://hydra.iohk.io/job/Cardano/iohk-nix/cardano-deployment/latest-finished/download/1/

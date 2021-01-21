@@ -19,6 +19,9 @@ import (
 	"github.com/spf13/viper"
 )
 
+const NodeTypeRelay = "relay"
+const NodeTypeProducer = "producer"
+
 const cardanoConfigURL = "https://hydra.iohk.io/job/Cardano/iohk-nix/cardano-deployment/latest-finished/download/1/"
 const config = "mainnet-config.json"
 const newConfig = "config.json"
@@ -105,9 +108,9 @@ func (c *Config) updateCardanoConfig() {
 			}
 		}
 
-		nodeType := "relay"
+		nodeType := NodeTypeRelay
 		if c.IsProducer {
-			nodeType = "producer"
+			nodeType = NodeTypeProducer
 		}
 
 		nodeName := fmt.Sprintf("%s-%s", c.ContainerName, nodeType)
