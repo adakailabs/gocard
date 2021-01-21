@@ -85,11 +85,9 @@ func initConfig() {
 		}
 
 		// Search config in home directory with name ".gocard" (without extension).
-		viper.AddConfigPath(home)
+		viper.AddConfigPath(fmt.Sprintf("%s/cardano-node/config", home))
 		viper.AddConfigPath("./")
-		viper.AddConfigPath("/tmp")
 		viper.AddConfigPath("/etc/cardano")
-
 		viper.SetConfigName("gocard")
 	}
 

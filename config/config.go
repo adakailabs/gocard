@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/juju/errors"
 	"os"
+	"strings"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
@@ -29,7 +30,8 @@ type Config struct {
 	PortSet         nat.PortSet
 	HostConfig      *container.HostConfig
 	ContainerConfig *container.Config
-
+	ExposedPorts []string
+	PortMap map[nat.Port][]nat.PortBinding
 	CardanoBaseContainer string
 	CardanoBaseLocal     string
 	CardanoDB            string
@@ -122,40 +124,30 @@ func (c *Config) SetMount() {
 
 func (c *Config) SetExposedPorts() {
 	c.PortSet = make(map[nat.Port]struct{})
-	ports := viper.GetStringSlice("expose_ports")
+	c.ExposedPorts = viper.GetStringSlice("expose_ports")
 	if !c.IsProducer {
 		cardanoPort := fmt.Sprintf("%s/tcp", c.CardanoPort)
-		ports = append(ports, cardanoPort)
+		c.ExposedPorts = append(c.ExposedPorts, cardanoPort)
 	}
-	for _, port := range ports {
+
+	c.PortMap = make(map[nat.Port][]nat.PortBinding)
+
+	for _, port := range c.ExposedPorts {
+		hostPort := strings.Split(port,"/")[0]
 		c.PortSet[nat.Port(port)] = struct{}{}
+		c.PortMap[nat.Port(port)] = []nat.PortBinding{
+            {
+                HostIP: "0.0.0.0",
+                HostPort: hostPort,
+            }}
 	}
+	logrus.Info("portBindings: ", c.PortMap)
 }
 
 func (c *Config) SetHostConfig() {
 	c.HostConfig = &container.HostConfig{
 		Mounts: c.Mounts,
-		PortBindings: nat.PortMap{
-			"9100/tcp": []nat.PortBinding{
-            {
-                HostIP: "0.0.0.0",
-                HostPort: "9100",
-            },
-        },
-			"12798/tcp": []nat.PortBinding{
-				{
-					HostIP: "0.0.0.0",
-					HostPort: "12798",
-				},
-			},
-			"3001/tcp": []nat.PortBinding{
-				{
-					HostIP: "0.0.0.0",
-					HostPort: "3001",
-				},
-			},
-
-    },
+		PortBindings: c.PortMap,
 	}
 }
 

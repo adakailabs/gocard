@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"strings"
 	"time"
 
 	"github.com/docker/docker/api/types/container"
@@ -62,20 +63,18 @@ func Start(c *config.Config) {
 		panic(err)
 	}
 
-	writeContainerID(resp.ID)
-	containerWait(ctx, cli, resp.ID)
-	// readLogs(ctx, cli, resp.ID)
-}
-
-func containerWait(ctx context.Context, cli *client.Client, containerID string) {
 	// setup signal catching
 	sigs := make(chan os.Signal, 1)
 
 	// catch all signals since not explicitly listing
 	signal.Notify(sigs)
 
-	systemDNofifyWatch()
+	writeContainerID(resp.ID)
+	readStartupLogsAndNotify(ctx, cli, resp.ID)
+	containerWait(ctx, cli, resp.ID, sigs)
+}
 
+func containerWait(ctx context.Context, cli *client.Client, containerID string, sigs chan os.Signal) {
 	statusCh, errCh := cli.ContainerWait(ctx, containerID, container.WaitConditionNotRunning)
 	for {
 		select {
@@ -98,7 +97,7 @@ func containerWait(ctx context.Context, cli *client.Client, containerID string) 
 			os.Exit(1)
 
 		case s := <-sigs:
-			logrus.Infof("RECEIVED SIGNAL: %s", s.String())
+			logrus.Tracef("RECEIVED SIGNAL: %s", s.String())
 			if s.String() == "terminated" || s.String() == "interrupt" {
 				logrus.Info("exiting with signal: ", s.String())
 				stop(containerID)
@@ -110,6 +109,7 @@ func containerWait(ctx context.Context, cli *client.Client, containerID string) 
 }
 
 func systemDNofifyWatch() {
+	logrus.Info("notifying readiness to systemd")
 	_, err := daemon.SdNotify(false, daemon.SdNotifyReady)
 	if err != nil {
 		panic(err.Error())
@@ -130,8 +130,10 @@ func systemDNofifyWatch() {
 	}()
 }
 
-func readLogs(ctx context.Context, cli *client.Client, containerID string) {
+func readStartupLogsAndNotify(ctx context.Context, cli *client.Client, containerID string) {
 	timer := time.NewTicker(time.Second * 2)
+
+	logMap := make(map[string]struct{})
 
 	closure := func() {
 		for range timer.C {
@@ -140,14 +142,22 @@ func readLogs(ctx context.Context, cli *client.Client, containerID string) {
 				panic(errC)
 			}
 			scanner := bufio.NewScanner(out)
-
-			logrus.Info("monitoring logs")
 			_, errC = cli.ContainerLogs(ctx, containerID, types.ContainerLogsOptions{ShowStdout: true})
 			if errC != nil {
 				panic(errC)
 			}
 			for scanner.Scan() {
-				logrus.Info("XXXX", scanner.Text())
+				logLine := scanner.Text()
+				_, ok := logMap[logLine]
+				if !ok {
+					logrus.Info(logLine)
+					logMap[logLine] = struct{}{}
+				}
+				if strings.Contains(logLine, "block replay progress (%) = 99") {
+					logrus.Info("block replay complete")
+					systemDNofifyWatch()
+					return
+				}
 			}
 		}
 	}
