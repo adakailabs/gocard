@@ -145,13 +145,13 @@ func (c *Config) SetHostConfig() {
 			"12798/tcp": []nat.PortBinding{
 				{
 					HostIP: "0.0.0.0",
-					HostPort: "9100",
+					HostPort: "12798",
 				},
 			},
 			"3001/tcp": []nat.PortBinding{
 				{
 					HostIP: "0.0.0.0",
-					HostPort: "9100",
+					HostPort: "3001",
 				},
 			},
 
