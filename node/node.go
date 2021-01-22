@@ -94,14 +94,14 @@ func containerWait(ctx context.Context, cli *client.Client, containerID string, 
 				logrus.Error("could not remove pid file")
 			}
 			logrus.Info("stopping now")
-			os.Exit(1)
+			logrus.Exit(int(this.StatusCode))
 
 		case s := <-sigs:
 			logrus.Tracef("RECEIVED SIGNAL: %s", s.String())
 			if s.String() == "terminated" || s.String() == "interrupt" {
 				logrus.Info("exiting with signal: ", s.String())
 				stop(containerID)
-				logrus.Exit(1)
+				logrus.Exit(0)
 			}
 		}
 		time.Sleep(time.Second)
