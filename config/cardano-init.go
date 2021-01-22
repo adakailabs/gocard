@@ -41,9 +41,17 @@ var cardanoConfigFiles = map[string]string{
 
 func (c *Config) SetCardanoInit() {
 	configPath := fmt.Sprintf("%s/%s", c.CardanoBaseLocal, "config")
+	rtViewPath := fmt.Sprintf("%s/%s", c.CardanoBaseLocal, "rt-view")
 
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		if err := os.MkdirAll(configPath, os.ModePerm); err != nil {
+			err = errors.Annotatef(err, "creating dir: %s", configPath)
+			panic(err.Error())
+		}
+	}
+
+	if _, err := os.Stat(rtViewPath); os.IsNotExist(err) {
+		if err := os.MkdirAll(rtViewPath, os.ModePerm); err != nil {
 			err = errors.Annotatef(err, "creating dir: %s", configPath)
 			panic(err.Error())
 		}
