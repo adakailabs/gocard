@@ -10,6 +10,8 @@ service_is_producer: false
 expose_ports:
 #  - "9100/tcp"
   - "12798/tcp"
+  - "6660/tcp"
+  - "6666/tcp"
                        
 cardano_latest_config: https://hydra.iohk.io/job/Cardano/cardano-node/cardano-deployment/latest-finished/download/1/
 cardano_base_container: /home/lovelace/cardano-node

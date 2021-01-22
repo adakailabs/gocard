@@ -99,7 +99,7 @@ func initConfig() {
 	}
 	if _, err := os.Stat(config.GocardPidFile); err == nil {
 		logrus.Info("found docker ID")
-		viper.SetConfigName("gocard.pid")
+		viper.SetConfigFile(config.GocardPidFile)
 		if err := viper.MergeInConfig(); err != nil {
 			err = errors.Annotatef(err, "merging viper config %s", config.GocardPidFile)
 			panic(err.Error())

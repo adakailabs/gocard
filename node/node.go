@@ -150,7 +150,7 @@ func readStartupLogsAndNotify(ctx context.Context, cli *client.Client, container
 				logLine := scanner.Text()
 				_, ok := logMap[logLine]
 				if !ok {
-					logrus.Info(logLine)
+					fmt.Println(logLine)
 					logMap[logLine] = struct{}{}
 				}
 				if strings.Contains(logLine, "block replay progress (%) = 99") {
